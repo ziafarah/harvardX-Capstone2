@@ -1,0 +1,1068 @@
+---
+title: "Appliance Energy Consumption Prediction"
+subtitle: "HarvardX PH125.9x Data Science: Capstone Project" 
+author: "Farah Fauzia"
+date: "October, 2020"
+output: 
+  pdf_document: 
+    highlight: kate
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, 
+                      fig.align = 'center', cache=FALSE, cache.lazy = FALSE)
+```
+\newpage
+# Abstract {-}
+*Several types of machine learning algorithms were evaluated to predict appliance energy consumption with only considering light energy consumption and environment data from inside and outside a low-energy house. Tree-based models exhibited better performance than other type of algorithm models in this project. eXtreme Gradient Boosting models after hyperparameters optimization was the best model, which was able to explain 54.41% variances on training set, with only 2.51% difference of RMSE value between training and test set, and 8.55% better MAE value than benchmark model. Humidity were indicated as most important variable to explain energy consumption.*
+
+# Introduction
+This report was compiled as part of the Capstone course assignment of Data Science Professional Certificate program from HarvardX [(1)](#ref). The main objective of the assignment was to use publicly available dataset to apply machine learning techniques that go beyond standard linear regression as well as to showcase the skills obtained from the previous courses. For this assignment, predicting appliances energy consumption from a low energy building was chosen as project. 
+
+## Project Overview
+Appliances energy consumption in buildings represent significant portion of electrical energy demand [(2)](#ref), and therefore energy prediction becomes important for providing higher energy and cost saving for smart homes and smart cities [(3)](#ref). This project focused on regression problem--predicting energy consumption of household appliances based on light energy consumption and numerous environment parameters: temperature, humidity, and weather conditions from certain building. The dataset used was Appliances Energy Prediction Dataset (available at UCI Machine Learning Repository) [(4)](#ref), which contain 4.5 months data for electrical energy consumption and environmental data from a low-energy house in Belgium. While the main relevant paper of the dataset [(2)](#ref) already discussed extensive relationship between the features using several algorithms, this project would focus on regression problem without using time-related information of the dataset.
+
+## Specific Objectives
+This specific aims of this project were: a) to apply several types of machine learning algorithms for predicting appliances energy consumption based on only light energy consumption and environment data from inside and outside the building; b) to discuss the general performance of the best model based on benchmarking of evaluation metrics with the main related work [(2)](#ref); and c) to understand what features are important for energy consumption prediction from low-energy house.
+
+## Key Steps
+Several steps that would be carried out to achieve the specific goals include:
+
+*1. Data Preparation*: Dataset would be loaded into `R` version 4.0.2 under Windows 10 x64, carried out on R Studio version 1.3.1093 (full environment can be found on [Appendix](#apdx1)) and be subjected into pre-processing to ensure its tidiness.
+
+*2. Explanatory Data Analysis*: initial exploration and basic visualization of dataset would be carried out and feature reduction of dataset would also be carried out for possible effective computation.
+
+*3. Modeling Approaches:* dataset would be split into two subsets: train and test subset. Control parameters, evaluation metrics, and benchmark target of the models would be defined. Several types of machine learning algorithms would be applied: linear regression model, distance-based model (K-Nearest Neighbor), neural network model (Artificial Neural Network), and tree-based models (Random Forest, Gradient Boost Machine, and eXtreme Gradient Boosting).
+
+*4. Model Testing & Performance Summary:* the best models with satisfying evaluation metrics on train dataset would be fitted to test dataset and the performance would be evaluated and discussed to draw conclusion based on previously stated specific objectives.
+
+# Explanatory Data Analysis
+## Dataset Overview
+The Appliances Energy Prediction Dataset [(4)](#ref) consists of numerous measurement of energy consumption and environment parameters from a low energy house in Stamburges, Belgium [(2)](#ref). Several measurements were collected from wireless sensors inside and outside house, and joined with information from nearby weather station, which were recorded every 10 minutes for 137 days [(3)](#ref). Table 1 summarize the variables description of the dataset after pre-processing: 
+```{r message=FALSE, warning=FALSE, include=FALSE}
+options(digits = 3)
+
+if(!require(tidyverse)) install.packages("tidyverse", dependencies = TRUE)
+library(tidyverse)
+library(scales)
+
+
+energydata <- read.csv(url("https://archive.ics.uci.edu/ml/machine-learning-databases/00374/energydata_complete.csv"),
+                       header=TRUE, stringsAsFactors=FALSE)
+
+cnames <- c("Date_Time", "Appliances", "Lights", "T_kitchen", "H_kitchen", 
+            "T_living", "H_living", "T_laundry", "H_laundry", "T_office", "H_office", 
+            "T_bathroom", "H_bathroom", "T_outNorth", "H_outNorth", "T_ironRoom",
+            "H_ironRoom", "T_teenRoom2", "H_teenRoom2", "T_parentRoom", "H_parentRoom",
+            "T_outside", "Pressure", "H_outside", "WindSpeed", "Visibility", "T_dewPoint", 
+            "RandVar1", "RandVar2")
+colnames(energydata) <- cnames
+
+any(is.na(energydata))
+```
+```{r}
+if(!require(kableExtra)) install.packages("kableExtra", dependencies = TRUE)
+library(kableExtra)
+
+cnames <- c("Date_Time", "Appliances", "Lights", "T_kitchen", "H_kitchen", 
+            "T_living", "H_living", "T_laundry", "H_laundry", "T_office", "H_office", 
+            "T_bathroom", "H_bathroom", "T_outNorth", "H_outNorth", "T_ironRoom",
+            "H_ironRoom", "T_teenRoom2", "H_teenRoom2", "T_parentRoom", "H_parentRoom",
+            "T_outside", "Pressure", "H_outside", "WindSpeed", "Visibility", "T_dewPoint", 
+            "RandVar1", "RandVar2")
+
+variables <- data.frame(Var_names = cnames,
+                        description = c("Date & time information", 
+                  "Appliances energy consumption","Lights energy consumption", 
+                  "Temperature in kitchen", "Humidity in kitchen", 
+                  "Temperature in living room", "Humidity in living room", 
+                  "Temperature in laundry room", "Humidity in laundry doom",
+                  "Temperature in office room", "Humidity in office room", 
+                  "Temperature in bathroom", "Humidity in bathroom",
+                  "Temperature of north side outside house", 
+                  "Humidity of north side outside house", 
+                  "Temperature in ironing room", "Humidity in ironing room", 
+                  "Temperature in teenager room 2", "Humidity in teenager room 2",
+                  "Temperature in parents room", "Humidity in parents room",
+                  "Temperature outside (from nearby weather station)", 
+                  "Pressure (from nearby weather station)", 
+                  "Humidity outside (from nearby weather station)", 
+                  "WindSpeed (from nearby weather station)", 
+                  "Visibility (from nearby weather station)",
+                  "Temperature dew point (from nearby weather station)", 
+                  "Random Variable 1", "Random Variable 2"),
+                  unit = c("Y-M-D h:min:s","Wh", "Wh", "Celcius", "%", 
+           "Celcius", "%", "Celcius", "%", "Celcius", "%", "Celcius", "%", 
+           "Celcius", "%", "Celcius", "%", "Celcius", "%", "Celcius", "%",
+           "Celcius", "mmHg", "%", "m/s", "km", "Celcius", 
+           "Non dimensional", "Non dimensional")
+)
+
+variables %>% kbl(col.names = c("Variable Names", "Description", "Unit [note]"),
+                  align = c("l", "l", "l"),
+                  caption = "Dataset Variables and Description [note]", 
+                  booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("striped", "hold_position")) %>%
+  row_spec(0, bold = TRUE) %>%
+  add_footnote(c("modified from (2)", "Temperatures is in degree")) 
+```
+\newpage
+## Initial Exploration & Visualization
+These tables summarize the first 6 lines of the dataset:
+```{r}
+head(energydata[1:15]) %>% kbl(booktabs = TRUE) %>%
+  kable_styling(latex_options = "scale_down") %>%
+  row_spec(0, bold = TRUE)
+head(energydata[16:29]) %>% kbl(booktabs = TRUE) %>%
+  kable_styling(latex_options = "scale_down") %>%
+  row_spec(0, bold = TRUE)
+```
+```{r}
+row <- dim(energydata)[1]
+col <- dim(energydata)[2]
+```
+
+This dataset contains no missing values, already in tidy format with each rows representing one observation which was taken in 10 minutes interval time. There are total `r comma(row)` observation of `r col` variables, and with following structures:
+```{r}
+str(energydata)
+```
+\newpage
+Appliances energy consumption over the measurement period shows the consumption data varies greatly with no particular trend in time series:
+```{r fig.height=3.5}
+if(!require(lubridate)) install.packages("lubridate", dependencies = TRUE)
+library(lubridate)
+
+dateplot <- energydata %>% mutate(Date = as.Date(energydata$Date_Time)) %>% 
+    select(Appliances, Date)
+
+dateplot %>% ggplot(aes(x = Date, y = Appliances)) +
+    geom_line(color = "#9970AB", size = 0.75) + 
+    labs(title = "Appliances Energy Consumption over Time",
+         x = "Date", y = "Energy Consumption (Wh)") + theme_bw()
+```
+For this project, the time-related feature would not be explored and the main focus would be regression problem based on other available features.
+```{r}
+mean <- mean(energydata$Appliances)
+```
+Average energy consumption of appliances is `r round(mean, 2)` Wh, with the frequency of the appliances energy consumption of the house can be seen in the following figure:
+```{r fig.height=3.5}
+energydata %>% ggplot(aes(x = Appliances)) + 
+  geom_histogram(bins = 50, color = "white", fill = "#9970AB") +
+  geom_vline(xintercept = mean, col = "#1B7837", linetype = "dashed") +
+  labs(title = "Appliances Energy Consumption Frequency",
+       x = "Energy Consumption (Wh)", y = "Frequency") + theme_bw()
+```
+The plot above indicates that the house is indeed representative as low energy building as most consumption value was below 100 Wh.
+
+The distribution of temperature conditions from inside and outside the house can be seen in the following figures:
+```{r fig.height=6.5}
+tempvar <- energydata %>% 
+    select(T_kitchen, T_living, T_laundry, T_office, T_bathroom, T_outNorth, T_ironRoom, 
+           T_teenRoom2, T_parentRoom, T_outside, T_dewPoint)
+
+ggplot(gather(tempvar), aes(value)) + 
+    geom_histogram(aes(y=..density..), bins = 20, color = "white", fill = "#9970AB") + 
+    geom_density(alpha = 0.2, fill = "#E7D4E8", colour = "#1B7837") +
+    labs(x = "Temperature (Celcius)", y = "Frequency") + theme_bw() +
+    facet_wrap(~key, scales = "free", ncol = 3) 
+```
+Most of the measurements showed almost normal distribution, excluding the `T_parentRoom`. It was also observed that `T_outNorth` (measurement from sensor outside of the house) and `T_outside` (measurement from nearby weather station) exhibit very similar distribution, which indicates the possibility of linear relationship between these features.
+
+\newpage
+Similarly, distribution of humidity conditions inside and outside the house can be seen in the figures on the following page. 
+```{r fig.height=6.5}
+humvar <- energydata %>% 
+    select(H_kitchen, H_living, H_laundry, H_office, H_bathroom, H_outNorth, H_ironRoom, 
+           H_teenRoom2, H_parentRoom, H_outside) 
+
+ggplot(gather(humvar), aes(value)) + 
+    geom_histogram(aes(y=..density..), bins = 20, color = "white", fill = "#9970AB") + 
+    geom_density(alpha = 0.2, fill = "#E7D4E8", color = "#1B7837") + 
+    labs(x = "Humidity (%)", y = "Frequency") + theme_bw() +
+    facet_wrap(~key, scales = "free", ncol = 3)
+```
+Humidity measurements from inside of the house showed normal distribution tendency. However, unlike the previous temperature distribution, measurement from outside sensor of the house (`H_outNorth`) and from nearby weather station (`H_outside`) did not show similar trend. This indicates that the two variables may not highly correlate to each other.
+\newpage
+Distribution from other features can be seen in the following figure:
+```{r fig.height=5.5, fig.width=5}
+othervar <- energydata %>% 
+    select(Lights, Pressure, WindSpeed, Visibility, RandVar1, RandVar2) 
+
+othervar_label <- as_labeller(c(Lights = "Lights Consumption (Wh)", 
+                                Pressure = "Pressure (mmHg)", 
+                                Visibility = "Visibility (km)",
+                                RandVar1 = "Random Variable 1",
+                                RandVar2 = "Random Variable 2",
+                                WindSpeed = "Wind Speed (m/s)"))
+
+ggplot(gather(othervar), aes(value)) + 
+    geom_histogram(aes(y=..density..), bins = 20, color = "white", fill = "#9970AB") + 
+    geom_density(alpha = 0.2, fill = "#E7D4E8", color = "#1B7837") +
+    labs(x = "Feature", y = "Frequency") + theme_bw() +
+    facet_wrap(~key, scales = "free", labeller = othervar_label, ncol = 2) 
+```
+From plot above it can be seen that the except `Pressure`, remaining features exhibited irregular distribution and almost no distribution for Random Variable 1 & Random Variable 2.
+
+From the visualizations, some features had possibility of having close relationship between each other. Therefore, it might be possible to reduce some similar features in order to optimize modeling computation.
+
+\newpage
+## Features Reduction
+Aside from time-related feature, this dataset consists of 27 features and 1 target variable. Before applying the machine learning algorithm, it is necessary to do pre-processing to remove the features that are clearly not useful. Pre-processing can be done by removing features with very few non-unique values or close to zero variation [(5)](#ref). The `nearZero` function from `Caret` package was used and the following result was obtained:
+
+```{r}
+if(!require(caret)) install.packages("caret", dependencies = TRUE)
+library(caret)
+
+nearZeroVar(energydata[, 3:29], saveMetrics = TRUE) %>% 
+  kbl(booktabs = TRUE) %>%
+  kable_styling(latex_options = "hold_position") %>%
+  row_spec(0, bold = TRUE, align = "c")
+```
+The results shown that there is no particular features recommended to be removed. Therefore, another approach of removing features that are highly correlated with others [(5)](#ref) would be used.
+
+\newpage
+Correlation can be generally defined as a measure of how strongly one variable depends on another [(6)](#ref). For this approach, the correlation matrix of the variables, excluding `Date_Time` feature, was generated using `corrplot` package with Pearson correlation coefficient as indicators. Pearson correlation coefficient summarizes the strength of linear relationship between two data variables (ranged between -1, positive correlation, and 1, negative correlation) [(6)](#ref).  
+
+In order to generate correlation matrix, all values would need to be converted into numerical class. The visualization of all pairs correlation of the dataset can be seen as follow:
+```{r fig.height=7}
+energydata2 <- energydata %>% mutate(Appliances = as.numeric(Appliances), 
+                                     Lights = as.numeric(Lights)) %>%
+  select(-Date_Time)
+
+cor <- cor(energydata2) #using Pearson coefficient by default
+
+if(!require(corrplot)) install.packages("corrplot", dependencies = TRUE)
+if(!require(RColorBrewer)) install.packages("RColorBrewer", dependencies = TRUE)
+library(corrplot)
+library(RColorBrewer)
+
+corrplot(cor, method="ellipse", type="lower", order="hclust", 
+         tl.col="black", tl.srt=45,
+         col=brewer.pal(n=8, name="PRGn"))
+```
+
+\newpage
+For easier interpretation, `corrr` package [(7)](#ref) was also used. First, relationship between target correlation with all features was examined. The result can be summarized as following visualization:
+```{r fig.height=6}
+if(!require(corrr)) install.packages("corrr", dependencies = TRUE)
+library(corrr)
+
+cor_tar <- correlate(energydata2, diagonal = NA) # using Pearson coefficient by default
+
+cor_tar %>%
+  focus(Appliances) %>%
+  mutate(rowname = reorder(rowname, Appliances)) %>%
+    ggplot(aes(rowname, Appliances)) + coord_flip() +
+    geom_col(color = "white", fill = "#9970AB") + theme_bw() +
+    labs(title = "Correlation of Appliances Energy Consumption with the Features",
+         y = "Correlation with Appliances Energy Consumption", x = "Features")
+```
+
+From the plot above, it is clear that there is no particular feature with high correlation (> absolute 0.9) with target variable. Highest positive correlation was found with light energy consumption `Lights` (around `0.2`) and highest negative correlation with outside humidity `H_outside` (`-0.15`). It is also important to note discuss about `RandVar1` & `RandVar2` features, which were originally included in the dataset only for the purpose of verifying method used to filter variable features [(2)](#ref). While it was expected that these two random variables exhibit almost no correlation (absolute value of `0.01`) with the target variable, another feature, `Visibility`, shows no systematic relationship with target variable at all (value `0`). For this reason, the `Visibility` feature would be removed.
+
+\newpage
+If two features are highly correlated among themselves, it is possible to make accurate prediction on the target with just one of them [(6)](#ref). Therefore, for next step, the two highly correlated (> absolute 0.9) features were identified, which can be summarized by the following table:
+```{r}
+cor_tar %>%  
+  gather(-rowname, key = "colname", value = "cor") %>% 
+  filter(abs(cor) > 0.9) %>%
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(latex_options = "hold_position") %>%
+  row_spec(0, bold = TRUE)
+```
+
+As previously mentioned, `RandVar1` & `RandVar2` features were only random variables. Since they also perfectly correlated to each other, these two features would be removed. Another highly correlated features was between `T_outside` and `T_outNorth`, which has been previously indicated in the features distribution visualization. Based on this, `T_outNorth` would be removed since it can be represented by measurement data from weather station outside the house `T_outside`. For the remaining correlation, it is indicated that `T_parentRoom` generally exhibit linear relationship with temperature measurements in other rooms (i.e. iron room, bathroom, laundry room). Since it can be represented by those similar features, `T_parentRoom` would be removed.
+```{r}
+endatared <- energydata2 %>% select(-RandVar1, -RandVar2, -Visibility, 
+                                    -T_parentRoom, -T_outNorth)
+col2 <- dim(endatared)[2]
+```
+To summarize, through correlation matrix analysis, 5 features `Visibility`, `RandVar1`, `RandVar2`, `T_outNorth` and `T_parentRoom` would be removed from dataset, resulting final `r col2` variables.
+
+# Modeling Approaches
+```{r include=FALSE}
+set.seed(1306, sample.kind = "Rounding")
+test_index <- createDataPartition(y = endatared$Appliances, 
+                                  times = 1, p = 0.25, list = FALSE)
+
+endata_train <- endatared[-test_index,]
+endata_test <- endatared[test_index,]
+
+dimtrain <- dim(endata_train)
+dimtest <- dim(endata_test)
+```
+## Preparation
+The dataset would be split into train set and test set. The splitting ratio would mimic the setup used in the main relevant paper [(2)](#ref), where 75% of dataset would serve as train set and the remaining 25% would be test set. These sub-dataset include 23 variables (1 target and 22 features), with `r dimtrain[1]` observations in train dataset and `r dimtest[1]` observations in test dataset.
+
+Several machine learning algorithm types (linear regression model, distance-based model, neural network model, and tree-based models) using `Caret` package would be applied into train set and the best model would be evaluated on the test set. All models would be fitted using same train control parameter, through 5 folds cross-validation. `doParallel` package would also be used to enable parallel processing when running model for speeding up the computations.
+```{r include=FALSE}
+control <- trainControl(method = "cv", # cross-validation method
+                        number = 5) # by 5 folds
+```
+
+## Evaluation Metrics & Benchmark
+Basic evaluation of machine learning algorithms is comparing the obtained predicted value with the actual outcome, which can be measured using loss function or the difference between these values. For this project, root mean squared error (RMSE) and mean absolute error (MAE) would be used as loss function parameters to compare performance of the models. These metrics were chosen to meet one of the specific objectives of the project: to discuss general performance of best model by benchmarking to main related work [(2)](#ref). 
+
+\newpage
+RMSE can be defined as:
+$$ RMSE = \sqrt{\frac{1}{n}\displaystyle\sum_{n} (Y_{i}-\hat{Y}_{i})^{2}} $$
+and MAE can be defined as:
+$$ MAE = {\frac{1}{n}\displaystyle\sum_{n} |Y_{i}-\hat{Y}_{i}|} $$
+Where $Y_i$ is the actual energy consumption measurement, $\hat{Y_i}$ is the predicted value, and $n$ is number of measurements. The lower RMSE and MAE values indicate better models.
+```{r include=FALSE}
+RMSE <- function(true, pred){
+  sqrt(mean((true - pred)^2))
+}
+
+MAE <- function(true, pred) {
+  mean(abs((true - pred)))
+}
+
+```
+
+In this project, coefficient of determination or R-squared ($R^2$) would also be discussed to evaluate how many variances a model could explain. This metric would be pulled from train result using `Caret` package. Higher $R^2$ value indicates better performance.
+
+In addition, running time of the models would also be compared by utilizing `proc.time` function. Running time would be measured for each model under active parallel processing condition.
+
+Main related work [(2)](#ref) used four models considering all features (including time-related information): multiple linear regression, support vector machine with radial kernel, random forest (RF), and gradient boosting machines (GBM), with the best model have following performance:
+```{r}
+benchmark_model <- bind_rows(tibble(model = "Benchmark (GBM)",
+                                "RMSE (Train)" = 17.56,
+                                "MAE (Train)" = 11.97,
+                               "RMSE (Test)" = 66.65, 
+                                "MAE (Test)" = 35.22))
+benchmark_model %>% 
+  kbl(col.names = c("Model", "RMSE", "MAE", "RMSE", "MAE"),
+      align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train" = 2, "Test" = 2), bold = TRUE) %>%
+  row_spec(0, bold = TRUE)
+  
+```
+
+Since due to computational limitation this project could not setup similar modeling condition (10 fold cross-validation with 3 repeats), the benchmarking would be discussed in general manner.
+
+```{r include=FALSE}
+# Enabling parallel computing for training models
+if(!require(doParallel)) install.packages("doParallel", dependencies = TRUE)
+library(doParallel)
+
+cl <- makePSOCKcluster(4) # using 4 CPU cores to use
+registerDoParallel(cl)
+```
+
+## Linear Regression Model
+The first type of model is simple Multiple Linear Regression (MLR) model, which would use all available 22 features to find appropriate slope quantifying effect of each of them and respective response. The obtained evaluation metrics was:
+```{r}
+set.seed(1306, sample.kind = "Rounding")
+
+timeStart <- proc.time() 
+mlr <- train(Appliances ~ .,
+             data = endata_train,
+             method = "lm",
+             metric = "RMSE",
+             trControl = control)
+time_mlr <- proc.time() - timeStart 
+
+mlr_results <- bind_rows(tibble(Model = "Multiple Linear Regression (MLR)",
+                              "RMSE" = getTrainPerf(mlr)$TrainRMSE,
+                              "MAE" = getTrainPerf(mlr)$TrainMAE,
+                              "R-squared" = getTrainPerf(mlr)$TrainRsquared,
+                              "Train Time (s)" = time_mlr[[3]]))
+mlr_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+```
+
+MLR could only explain about `r round(getTrainPerf(mlr)$TrainRsquared*100,2)`% of the variance. In addition, the residual plot of the MLR model can be generated:
+```{r}
+res_mlr <- resid(mlr)
+plot(endata_train$Appliances, res_mlr,
+     ylab = "Residuals", xlab = "Appliances Energy Consumption")
+abline(0,0)
+
+```
+
+Residuals were difference between the true observed data and the fitted values of dependent variable. From plot above, it can be seen that the residuals are not normally distributed around the horizontal axis, which indicates that this model could not properly represent the relationship between the predictors and appliances energy consumption [(2)](#ref).
+
+## Distance-based Model
+Distance-based model can also be used in regression problem, and in this project K-Nearest Neighbor (KNN) model was chosen as representative of this type. KNN algorithm predicts outcome of new observation through comparison to $k$ similar cases in the training dataset [(8)](#ref), with $k$ is tuning parameter that can be determined. 
+
+As one example of distance-based algorithm, KNN is highly affected by the range of features, since it use distance between data points to determine the similarity [(9)](#ref). This dataset consists of different range of values from various metrics, therefore, before applying KNN it is necessary to preprocess the data through scaling. The dataset would be normalized to scale the values so they end up ranging between 0 and 1, using `preProcess` on `Caret` package. For determination of parameter $k$, automatic tuning using `tuneLength` would also be carried out. `tuneLength` argument tells caret how many possible values to test.
+```{r include=FALSE}
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+knn <- train(Appliances ~ .,
+             data = endata_train,
+             method = "knn",
+             preProcess = "range",
+             metric = "RMSE",
+             trControl = control,
+             tuneLength = 10)
+time_knn <- proc.time() - timeStart
+```
+
+The best $k$ value which return the lowest RMSE was `r knn$bestTune[1,]`, with obtained evaluation metrics:
+```{r}
+knn_results <- bind_rows(tibble(Model = "k-Nearest Neighbor (KNN)",
+                              "RMSE" = getTrainPerf(knn)$TrainRMSE,
+                              "MAE" = getTrainPerf(knn)$TrainMAE,
+                              "R-squared" = getTrainPerf(knn)$TrainRsquared,
+                              "Train Time (s)" = time_knn[[3]]))
+knn_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+
+KNN model already improved the RMSE and MAE of train set considerably, and was able to explain `r round(getTrainPerf(knn)$TrainRsquared*100, 2)`% of the variance. 
+
+## Neural Network Model
+As representative of neural network type, Artificial Neural Network (ANN) model was chosen. It was mentioned that ANNs were the most used algorithms for energy consumption in buildings [(3)](#ref) and therefore, worth to be explored for this project.  For ANN, the dataset would be pre-processed by scaling using standardization, and automatic tuning would be carried out.
+```{r include=FALSE}
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time() 
+ann <- train(Appliances ~ .,
+             data = endata_train,
+             method = "nnet",
+             metric = "RMSE",
+             preProcess = c("center", "scale"),
+             trControl = control,
+             tuneLength = 3,
+             linout = TRUE) 
+time_ann <- proc.time() - timeStart 
+```
+
+The best `size` and `decay` for ANN parameters which return the lowest RMSE were `r ann$bestTune[1,1]` and `r ann$bestTune[1,2]` respectively. The obtained evaluation metrics were:
+```{r}
+ann_results <- bind_rows(tibble(Model = "Artificial Neural Network (ANN)",
+                              "RMSE" = getTrainPerf(ann)$TrainRMSE,
+                              "MAE" = getTrainPerf(ann)$TrainMAE,
+                              "R-squared" = getTrainPerf(ann)$TrainRsquared,
+                              "Train Time (s)" = time_knn[[3]]))
+ann_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+```
+From result above, ANN model only provided slight improvement from MLR model and were outperformed by previous KNN model. Therefore, neural network type models would not be explored any further.
+
+## Tree-Based Models
+### Random Forest (RF) Model
+Next, tree-based models would be evaluated. RFs are very popular machine learning algorithm that improve prediction performance and reduce instability through averaging multiple decision trees, on a forest of trees constructed with randomness [(5)](#ref). RF is a special type of bagging models [(8)](#ref) in tree-based model, which have concept of random sampling with replacement [(10)](#ref). 
+
+Tree-based models generally do not need scaling. However, several hyperparameters in RF would need to be tuned in order to minimize RMSE. For initial exploration,  `mtry` (number of features to be considered at any given split) parameter would be tuned manually through expand grid. 
+```{r include=FALSE}
+if(!require(randomForest)) install.packages("randomForest", dependencies = TRUE)
+library(randomForest)
+
+rf_grid <- expand.grid(mtry = 1:5)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+rf <- train(Appliances ~ .,
+            data = endata_train,
+            method = "rf",
+            metric = "RMSE",
+            trControl = control,
+            tuneGrid = rf_grid)
+time_rf <- proc.time() - timeStart
+```
+
+The best `mtry` value which return the lowest RMSE was `r rf$bestTune[1,]`, with obtained evaluation metrics:
+```{r}
+rf_results <- bind_rows(tibble(Model = "Random Forest (RF)",
+                              "RMSE" = getTrainPerf(rf)$TrainRMSE,
+                              "MAE" = getTrainPerf(rf)$TrainMAE,
+                              "R-squared" = getTrainPerf(rf)$TrainRsquared,
+                              "Train Time (s)" = time_rf[[3]]))
+rf_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+compare1 <- (getTrainPerf(mlr)$TrainRMSE - getTrainPerf(rf)$TrainRMSE)/ getTrainPerf(mlr)$TrainRMSE*100
+compare2 <- (getTrainPerf(rf)$TrainRsquared - getTrainPerf(knn)$TrainRsquared)/ getTrainPerf(knn)$TrainRsquared*100
+```
+
+RF was able to improve RMSE `r round(compare1, 2)`% from MLR model, with was a better performance than KNN model. It was able to explain `r round(getTrainPerf(rf)$TrainRsquared*100, 2)`% of the variance (`r round(compare2, 2)`% improvement compared to KNN model). 
+
+This result indicates the worth of further exploring tree-based models. While it is also possible to further optimize the hyperparameters of RF, the computation time was a challenge. Therefore, different approach of tree-based models would be evaluated.
+
+### Gradient Boosting Machine (GBM) Model
+GBM models also known as boosting, which try to improve the prediction by utilizing the information from the first trees [(2)](#ref). In boosting method, the trees are grown sequentially, where each successive tree is grown using information from previously grown trees [(8)](#ref). Different with bagging, random sampling in boosting will include replacement over weighted data [(10)](#ref). 
+
+GBM also called stochastic gradient boosting, and can improve generalizability of model by utilizing gradient descent to minimize loss function [(11)](#ref). In the benchmark work [(2)](#ref), GBM was chosen as the best model which provided the best RMSE. For this project, GBM model would be applied using `gbm` method in `Caret` package.  Determination of its hyperparameters would be carried out through automatic tuning using `tuneLength.`
+```{r include=FALSE}
+if(!require(gbm)) install.packages("gbm", dependencies = TRUE)
+library(gbm)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time() 
+gbm <- train(Appliances ~ .,
+            data = endata_train,
+            method = "gbm",
+            metric = "RMSE",
+            trControl = control,
+            tuneLength = 10,
+            verbose = FALSE) 
+time_gbm <- proc.time() - timeStart 
+```
+
+\newpage
+
+Best tune for GBM parameters which return the lowest RMSE were: 
+```{r}
+gbm$bestTune %>%
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  row_spec(0, bold = TRUE)
+```
+With obtained evaluation metrics:
+```{r}
+gbm_results <- bind_rows(tibble(Model = "Gradient Boosting Machine (GBM)",
+                              "RMSE" = getTrainPerf(gbm)$TrainRMSE,
+                              "MAE" = getTrainPerf(gbm)$TrainMAE,
+                              "R-squared" = getTrainPerf(gbm)$TrainRsquared,
+                              "Train Time (s)" = time_gbm[[3]]))
+gbm_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+With auto-tuning, GBM did not perform better than RF model on the test set. Therefore, another tree-based model with boosting approach would be evaluated.
+
+### eXtreme Gradient Boosting (XGBoost) Model
+XGBoost model is one of boosting approaches which use more accurate approximations to find the best tree model through utilization of second order derivative of loss function and advanced regularization to improve model generalization [(11)](#ref). For this project, XGBoost model would be applied using `xgbtree` method in `Caret` package. XGBoost have several hyperparameters which can be determined by using auto or manual tuning.
+
+#### Auto-tuned XGBoost
+```{r include=FALSE}
+if(!require(xgboost)) install.packages("xgboost", dependencies = TRUE)
+library(xgboost)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+xgb0 <- train(Appliances ~ .,
+             data = endata_train,
+             method = "xgbTree",
+             metric = "RMSE",
+             trControl = control,
+             tuneLength = 5)
+time_xgb0 <- proc.time() - timeStart
+```
+
+First, hyperparameters would be determined through automatic tuning using `tuneLength.` Best tune for XGBoost parameters which return the lowest RMSE based using auto-tuning were:  
+```{r}
+xgb0$bestTune %>%
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  row_spec(0, bold = TRUE)
+```
+with the following obtained evaluation metrics:
+```{r}
+xgb0_results <- bind_rows(tibble(Model = "XGBoost (Auto-tuned)",
+                              "RMSE" = getTrainPerf(xgb0)$TrainRMSE,
+                              "MAE" = getTrainPerf(xgb0)$TrainMAE,
+                              "R-squared" = getTrainPerf(xgb0)$TrainRsquared,
+                              "Train Time (s)" = time_xgb0[[3]]))
+xgb0_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+compare3 <- (getTrainPerf(gbm)$TrainRMSE - getTrainPerf(xgb0)$TrainRMSE)/ getTrainPerf(gbm)$TrainRMSE*100
+compare4 <- time_rf[[3]]/time_xgb0[[3]]
+```
+
+With auto-tuning, XGBoost model did not perform better than RF model but it performed `r round(compare3, 2)`% better in RMSE than previous GBM model. Since the training time of XGBoost were about `r round(compare4, 1)` times faster than RF, it would be worth to further optimize the hyperparameters of this model and evaluate its performance.
+
+#### Optimized XGBoost
+
+In this step, hyperparameters of XGBoost would optimized through manual tuning using grid search. This process would be carried out step-by-step [(12)](#ref) based on initial best values of auto-tuned model. Detail values of grid search on each steps would be attached on [Appendix](#apdx2).
+
+***1. Number of Boosting Iterations, Learning Rate,  and Maximum Tree Depth Tuning***
+
+This step would serve as starting point:, the number of boosting iterations would be limited to 1000 in order not to overstretch the running time while narrow down possible maximum tree depth and learning rate parameters. Learning rate (`eta`) or shrinkage ranged from 0 to 1 and controls how much information from a new tree will be used in boosting (10) while `max_depth` control the depth of tree, where larger depth indicates more complex model [(13)](#ref).
+```{r include=FALSE}
+tune_xgb1 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = c(3, 4, 5, 6),
+  eta = c(0.1, 0.2, 0.3),
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = 1,
+  subsample = 1)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+
+train_xgb1 <- train(Appliances ~ .,
+             data = endata_train,
+             method = "xgbTree",
+             metric = "RMSE",
+             trControl = control,
+             tuneGrid = tune_xgb1)
+time_xgb1 <- proc.time() - timeStart
+```
+
+\newpage
+The following plot visualizes tuning result of this step:
+```{r fig.height=4}
+ggplot(train_xgb1)
+```
+The obtained evaluation metrics were:
+```{r}
+xgb1_results <- bind_rows(tibble(Model = "XGBoost (Optimization Step 1)",
+                              "RMSE" = getTrainPerf(train_xgb1)$TrainRMSE,
+                              "MAE" = getTrainPerf(train_xgb1)$TrainMAE,
+                              "R-squared" = getTrainPerf(train_xgb1)$TrainRsquared,
+                              "Train Time (s)" = time_xgb1[[3]]))
+xgb1_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+For `nrounds =` `r train_xgb1$bestTune$nrounds`, `max_depth =` `r train_xgb1$bestTune$max_depth`, and `eta =` `r train_xgb1$bestTune$eta`. This step slightly lower the RMSE and improved the $R^2$ from auto-tuned model. 
+	
+Lower learning rate means smaller piece of information will be used from each new tree [(10)](#ref). From the visualization, it can be concluded that low learning rate works better for this dataset. Therefore, learning rate would be tuned again for wider range of lower value and higher number of iterations after other hyperparameters were optimized. 
+	
+It was also indicated in `max_depth` that deeper trees may results in lower RMSE. However, trees that are too deep give higher chances of overfitting [(13)](#ref), as the model will use more information from the first trees and final trees will be less important [(10)](#ref). Therefore, instead of further deepening the trees, other parameters would be optimized.
+
+\newpage
+
+***2. Maximum Tree Depth and Minimum Child Weight Tuning***
+
+Since it is not desirable to have trees that are too deep, previously obtained `max_depth` would be set as maximum and possible minimum child weight would be narrowed down. Minimum child weight in regression refers to minimum number of instances required in a child node [(13)](#ref). 
+```{r include=FALSE}
+tune_xgb2 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = c(train_xgb1$bestTune$max_depth - 2,
+                train_xgb1$bestTune$max_depth - 1, 
+                train_xgb1$bestTune$max_depth),
+  eta = train_xgb1$bestTune$eta,
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = c(1, 2, 3, 4, 5),
+  subsample = 1)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+train_xgb2 <- train(Appliances ~ .,
+                    data = endata_train,
+                    method = "xgbTree",
+                    metric = "RMSE",
+                    trControl = control,
+                    tuneGrid = tune_xgb2)
+time_xgb2 <- proc.time() - timeStart
+```
+The following plot visualizes tuning result of this step:
+```{r fig.height=4}
+ggplot(train_xgb2)
+```
+The obtained evaluation metrics were:
+```{r}
+xgb2_results <- bind_rows(tibble(Model = "XGBoost (Optimization Step 2)",
+                              "RMSE" = getTrainPerf(train_xgb2)$TrainRMSE,
+                              "MAE" = getTrainPerf(train_xgb2)$TrainMAE,
+                              "R-squared" = getTrainPerf(train_xgb2)$TrainRsquared,
+                              "Train Time (s)" = time_xgb2[[3]]))
+xgb2_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+This step slightly lower the RMSE from previous step, for `max_depth =` `r train_xgb2$bestTune$max_depth`, and `min_child_weight =` `r train_xgb2$bestTune$min_child_weight`. It was expected that `min_child_weight` would be larger for deeper trees. 
+
+\newpage
+
+***3. Number of Samples and Number of Features Tuning***
+
+`subsample` control number of samples or observation, while `colsample_bytree` control number of features or variables supplied to a tree [(13)](#ref). Several possible values ranged from 0 to 1 were explored. 
+```{r include=FALSE}
+tune_xgb3 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = train_xgb1$bestTune$eta,
+  gamma = 0,
+  colsample_bytree = c(0.4, 0.6, 0.8, 1.0),
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = c(0.5, 0.75, 1.0))
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+train_xgb3 <- train(Appliances ~ .,
+                    data = endata_train,
+                    method = "xgbTree",
+                    metric = "RMSE",
+                    trControl = control,
+                    tuneGrid = tune_xgb3)
+time_xgb3 <- proc.time() - timeStart
+```
+The following plot visualizes tuning result of this step:
+```{r fig.height=4}
+ggplot(train_xgb3)
+```
+The obtained evaluation metrics were:
+```{r}
+xgb3_results <- bind_rows(tibble(Model = "XGBoost (Optimization Step 3)",
+                              "RMSE" = getTrainPerf(train_xgb3)$TrainRMSE,
+                              "MAE" = getTrainPerf(train_xgb3)$TrainMAE,
+                              "R-squared" = getTrainPerf(train_xgb3)$TrainRsquared,
+                              "Train Time (s)" = time_xgb3[[3]]))
+xgb3_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+for `subsample =` `r train_xgb3$bestTune$subsample` and `colsample_bytree =` `r train_xgb3$bestTune$colsample_bytree`. This step also slightly lower the RMSE from previous step.
+
+\newpage
+	
+***4. Regularization Tuning***
+`gamma` controls regularization or prevents overfitting by penalizing larger coefficients that do not improve model's performance [(13)](#ref), with higher value indicating higher regularization. Values of `gamma` ranged from 0 to 1 were explored to see if they could further improve model's performance. 
+```{r include=FALSE}
+tune_xgb4 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = train_xgb1$bestTune$eta,
+  gamma = c(0, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0),
+  colsample_bytree = train_xgb3$bestTune$colsample_bytree,
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = train_xgb3$bestTune$subsample)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+train_xgb4 <- train(Appliances ~ .,
+                    data = endata_train,
+                    method = "xgbTree",
+                    metric = "RMSE",
+                    trControl = control,
+                    tuneGrid = tune_xgb4)
+time_xgb4 <- proc.time() - timeStart
+```
+The following plot visualizes tuning result of this step:
+```{r fig.height=4}
+ggplot(train_xgb4)
+```
+The obtained evaluation metrics were:
+```{r}
+xgb4_results <- bind_rows(tibble(Model = "XGBoost (Optimization Step 4)",
+                              "RMSE" = getTrainPerf(train_xgb4)$TrainRMSE,
+                              "MAE" = getTrainPerf(train_xgb4)$TrainMAE,
+                              "R-squared" = getTrainPerf(train_xgb4)$TrainRsquared,
+                              "Train Time (s)" = time_xgb4[[3]]))
+xgb4_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+for `gamma =``r train_xgb4$bestTune$gamma`. Changing `gamma` values did not influence the RMSE, and only very slightly improved MAE and $R^2$.
+	
+***5. Number of Boosting Iteration and Learning Rate Re-tuning***
+
+After finalizing other possible hyperparameters, different values of previously obtained number of boosting iteration and learning rate would be re-tuned. Since it has been indicated that lower learning rate may work better with this dataset, `eta` value ranging from 0.01 to 0.1 would be explored. Lower `eta` leads to slower computation and must be supported by increase in number of boosting iterations [(13)](#ref). For this step, `nrounds` would be maximized up to 20,000 iterations. 
+```{r include=FALSE}
+tune_xgb5 <- expand.grid(
+  nrounds = seq(from = 1000, to = 20000, by = 200),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = c(0.01, 0.015, 0.025, 0.05, 0.1),
+  gamma = train_xgb4$bestTune$gamma,
+  colsample_bytree = train_xgb3$bestTune$colsample_bytree,
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = train_xgb3$bestTune$subsample)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+train_xgb5 <- train(Appliances ~ .,
+                    data = endata_train,
+                    method = "xgbTree",
+                    metric = "RMSE",
+                    trControl = control,
+                    tuneGrid = tune_xgb5)
+time_xgb5 <- proc.time() - timeStart
+```
+The following plot visualizes tuning result of this step:
+```{r fig.height=4}
+ggplot(train_xgb5)
+```
+The obtained evaluation metrics were:
+```{r}
+xgb5_results <- bind_rows(tibble(Model = "XGBoost (Optimization Step 5)",
+                              "RMSE" = getTrainPerf(train_xgb5)$TrainRMSE,
+                              "MAE" = getTrainPerf(train_xgb5)$TrainMAE,
+                              "R-squared" = getTrainPerf(train_xgb5)$TrainRsquared,
+                              "Train Time (s)" = time_xgb5[[3]]))
+xgb5_results %>% 
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+```
+It was indicated that the model has not yet stabilized even after 20,000 iterations. Further exploration up to 30,000 iterations (not printed in this report) did not significantly improve the performance, so the tuning would be finalized for `eta = ``r train_xgb5$bestTune$eta` and `nrounds =``r train_xgb5$bestTune$eta`. 
+
+```{r include=FALSE}
+tune_xgbfinal <- expand.grid(
+  nrounds = train_xgb5$bestTune$nrounds,
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = train_xgb5$bestTune$eta,
+  gamma = train_xgb4$bestTune$gamma,
+  colsample_bytree = train_xgb3$bestTune$colsample_bytree,
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = train_xgb3$bestTune$subsample)
+
+set.seed(1306, sample.kind = "Rounding")
+timeStart <- proc.time()
+xgb_final <- train(Appliances ~ .,
+                   data = endata_train,
+                   method = "xgbTree",
+                   metric = "RMSE",
+                   trControl = control,
+                   tuneGrid = tune_xgbfinal)
+time_xgbf <- proc.time() - timeStart
+
+xgbf_results <- bind_rows(tibble(Model = "XGBoost (Optimized)",
+                              "RMSE" = getTrainPerf(xgb_final)$TrainRMSE,
+                              "MAE" = getTrainPerf(xgb_final)$TrainMAE,
+                              "R-squared" = getTrainPerf(xgb_final)$TrainRsquared,
+                              "Train Time (s)" = time_xgbf[[3]]))
+```
+
+***XGBoost Optimization Summary***
+
+Table 2 summarized improvement of XGBoost model on test dataset after manual optimization of the hyperparameters:
+```{r}
+xgb_results <- bind_rows(xgb0_results, xgb1_results, xgb2_results,
+                         xgb3_results, xgb4_results, xgb5_results, xgbf_results)
+xgb_results %>% 
+  kbl(align = "c", booktabs = TRUE,
+      caption = "XGBoost Optimization Summary") %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+compare5 <- (getTrainPerf(xgb0)$TrainRMSE - getTrainPerf(xgb_final)$TrainRMSE)/
+  getTrainPerf(xgb0)$TrainRMSE*100
+```
+
+\newpage
+
+Optimized XGBoost was resulting in `r round(compare5, 2)`% RMSE improvement over auto-tuned model, with the following final hyperparameters: 
+```{r}
+train_xgb5$bestTune %>%
+  kbl(align = "c", booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position")%>% 
+  row_spec(0, bold = TRUE) 
+  
+```
+
+# Results & Discussion
+Table 3 summarized performance of various types of machine learning algorithms on training set:
+```{r}
+train_results <- bind_rows(mlr_results, knn_results, ann_results, 
+                           rf_results, gbm_results, xgb0_results, xgbf_results)
+train_results %>% 
+  kbl(align = "c", booktabs = TRUE,
+      caption = "Performance of Models on Training Set") %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train Performance" = 4), bold = TRUE)  %>%
+  row_spec(0, bold = TRUE)
+
+compare6 <- (getTrainPerf(rf)$TrainRMSE - getTrainPerf(xgb_final)$TrainRMSE)/
+  getTrainPerf(rf)$TrainRMSE*100
+
+compare7 <- (getTrainPerf(xgb_final)$TrainRsquared - getTrainPerf(rf)$TrainRsquared)/
+  getTrainPerf(rf)$TrainRsquared*100
+
+```
+
+The best models provide lower RMSE and MAE and highest $R^2$. Results above indicate tree-based models (RF, GBM, and XGBoosts) gave better performance compared to other type of algorithm models. Among them, bagging approach (RF) gave initial best performance despite the high train time. However, after hyperparameters optimization, boosting approach (Optimized XGBoost) was resulting in `r round(compare6, 2)`% improvement of RMSE compared to RF with lower training time. Optimized XGBoost model was able to explain the variances `r round(compare7, 2)`% better, although the MAE value was slightly lower than RF model. Therefore, both optimized XGBoost and RF would be subjected to testing.
+
+The two models would be evaluated on the test set to decide the best model of this project, which would be compared to the benchmark model. The benchmark work reported that the most important variable to predict appliance energy consumption using GBM model was time information (number of seconds from midnight) [(2)](#ref). In contrast, this project was trying to give prediction with only using environment data. The comparison between best models on this project and benchmark model can be summarized on Table 4:
+```{r include=FALSE}
+# RF model final testing
+set.seed(1306, sample.kind = "Rounding")
+pred_rf <- predict(rf, newdata = endata_test)
+rmse_rf <- RMSE(endata_test$Appliances, pred_rf)
+mae_rf <- MAE(endata_test$Appliances, pred_rf)
+
+# Optimized XGBoost final testing
+set.seed(1306, sample.kind = "Rounding")
+pred_xgb_final <- predict(xgb_final, newdata = endata_test)
+rmse_xgb_final <- RMSE(endata_test$Appliances, pred_xgb_final)
+mae_xgb_final <- MAE(endata_test$Appliances, pred_xgb_final)
+```
+```{r}
+best_model_rf <- bind_rows(tibble(model = "Random Forest",
+                                  "RMSE (Train)" = getTrainPerf(rf)$TrainRMSE,
+                                  "MAE (Train)" = getTrainPerf(rf)$TrainMAE,
+                                  "RMSE (Test)" = rmse_rf, 
+                                  "MAE (Test)" = mae_rf))
+
+best_model_xgbf <- bind_rows(tibble(model = "Optimized XGBoost",
+                               "RMSE (Train)" = getTrainPerf(xgb_final)$TrainRMSE,
+                               "MAE (Train)" = getTrainPerf(xgb_final)$TrainMAE,
+                               "RMSE (Test)" = rmse_xgb_final, 
+                               "MAE (Test)" = mae_xgb_final))
+
+best_compare <- bind_rows(benchmark_model, best_model_rf, best_model_xgbf)
+
+best_compare %>% 
+  kbl(col.names = c("Model", "RMSE", "MAE", "RMSE", "MAE"),
+      align = "c", booktabs = TRUE,
+      caption = "Benchmarking Summary") %>%
+  kable_styling(font_size = 9, latex_options = "hold_position") %>%
+  add_header_above(c(" " = 1, "Train" = 2, "Test" = 2), bold = TRUE) %>%
+  row_spec(0, bold = TRUE)
+```
+```{r}
+compare8 <- (35.22 - mae_xgb_final)/35.22*100
+compare9 <- (rmse_xgb_final - 66.65)/66.65*100
+compare10 <- (getTrainPerf(xgb_final)$TrainRMSE - rmse_xgb_final)/
+  getTrainPerf(xgb_final)$TrainRMSE*100
+compare11 <- (getTrainPerf(xgb_final)$TrainMAE - mae_xgb_final)/
+  getTrainPerf(xgb_final)$TrainMAE*100
+compare12 <- (66.65 - 17.56)/17.56*100
+compare13 <- (35.22 - 11.97)/11.97*100
+```
+
+The result on test set indicates that boosting approach from tree-based models (optimized XGBoost) were the best model for this project. Without considering time information features, optimized XGBoost model was able to perform better than benchmark model by `r round(compare8, 2)`% improvement of MAE metric and only `r round(compare9, 2)`% lower on RMSE metric. 
+
+\newpage
+
+It was interesting to note that the benchmark model show rather overfitting trend, indicated by low train RMSE and high test RMSE [(14)](#ref), while best model  for this project (optimized XGBoost) show slightly lower RMSE and MAE value on the test set. The objective of learning algorithm is optimal fit, with very minimal generalization gap (gap between train and validation loss learning curves) [(15)](#ref). While it is often expected that train RMSE to be lower than test RMSE, this will not always be true due to the randomness of the split [(14)](#ref). The best model of this project gave only about `r round(compare10, 2)`% difference on RMSE value between train and test set and `r round(compare11, 2)`% on MAE (in contrast to respectively `r round(compare12, 2)`% and `r round(compare13, 2)`% differences on benchmark model), which may still indicate a good fit.
+
+Alternative explanation of lower loss on validation rather than on the training is that the validation dataset may be relatively easier to predict rather than the training dataset [(15)](#ref). This issue can be solved by rechecking the splitting or performing more cross-validation. However, due to limited computation capacity, this would not be further evaluated on this project. 
+
+Next, the following figure shows relative variable importance for the best model (optimized XGBoost):  
+```{r}
+plot(varImp(xgb_final))
+```
+
+From plot above, it was clear that the 3 most important features were humidity measurements (from kitchen, living room, and laundry room).  Outside environment features (pressure and outside humidity) were also considerably important. This results was consistent with findings reported on benchmark work, where pressure and several humidity measurements inside house were most important after time variable [(2)](#ref). The least important features was wind speed measurement.
+
+\newpage
+
+# Conclusion
+This project managed to explore the possibility to predict appliance energy consumption with only considering light energy consumption and environment data from inside and outside a low-energy house. Several types machine learning algorithms were evaluated: linear model (MLR), distance-based model (KNN), neural network model (ANN), and tree-based models (RF, GBM, and XGBoost). Tree-based models exhibited better performance on test set. XGBoost after hyperparameters optimization was the best model, which was able to explain `r round(getTrainPerf(xgb_final)$TrainRsquared*100, 2)`% variances on training set, with `r round(compare10, 2)`% difference of RMSE value between training and test set, and `r round(compare8, 2)`% better MAE value than benchmark model. 
+
+Result of this project indicated importance of humidity measurement in explaining energy consumption. This result gave potent basis for further exploration to evaluate whether better humidity control inside house can lead to better energy consuming behavior on smart homes and cities. 
+
+Limitation of this project include limited computational performance which lead to minimum cross-validation and model tuning, and only cover one scenario of involved features. Repeated cross-validation may be further improve the scenario on this project. It may also worth to explore different scenarios of the features (i.e. comparing the effect of certain features presence). In addition, since tree-based models was indicated to suit this dataset, exploration of other similar models (i.e. Extremely Randomized Trees, which are similar to RF with rather challenging computation time) may also worth to be carried out. 
+
+# References {#ref}
+(1) https://www.edx.org/professional-certificate/harvardx-data-science
+(2) Candanedo, L.M., et al. Data driven prediction models of energy use of appliances in a low-energy house. *Energy and Buildings* 140 (2017) 81–97. http://dx.doi.org/10.1016/j.enbuild.2017.01.083
+(3) Chammas, M. et al. An efficient data model for energy prediction using wireless sensors. *Computers & Electrical Engineering* 76 (2019) 249-257. https://doi.org/10.1016/j.compeleceng.2019.04.002
+(4) https://archive.ics.uci.edu/ml/datasets/Appliances+energy+prediction
+(5) Irizarry RA. *Introduction to Data Science - Data Analysis and Prediction Algorithms with R.* Available at: https://rafalab.github.io/dsbook/machine-learning-in-practice.html
+(6) *Hands-on with Feature Selection Techniques: Filter Methods.* Available at: https://heartbeat.fritz.ai/hands-on-with-feature-selection-techniques-filter-methods-f248e0436ce5
+(7) *Exploring correlations in R with corrr.* Available at: https://drsimonj.svbtle.com/exploring-correlations-in-r-with-corrr
+(8) *Statistical Machine Learning Essentials.* Available at: http://www.sthda.com/english/articles/35-statistical-machine-learning-essentials/
+(9) *Feature Scaling for Machine Learning: Understanding the Difference Between Normalization vs Standardization.* Available at: https://www.analyticsvidhya.com/blog/2020/04/feature-scaling-machine-learning-normalization-standardization/
+(10) *Hyperparameter Tuning with XGBoost.* Available at: http://ml-course.kazsakamoto.com/Labs/hyperparameterTuning.html
+(11) *Machine Learning Basics - Gradient Boosting & XGBoost.* Available at: https://www.shirin-glander.de/2018/11/ml_basics_gbm/
+(12) *Visual XGBoost Tuning with Caret.* Available at: https://www.kaggle.com/pelkoja/visual-xgboost-tuning-with-caret
+(13) *Beginner Tutorials on XGBoost and Parameter Tuning in R.* Available at: https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial/
+(14) Dalpiaz, D. *R for Statistical Learning.* Available at: https://daviddalpiaz.github.io/r4sl/regression-for-statistical-learning.html#choosing-a-model
+(15) *Diagnosing Model Performance with Learning Curves.* Available at: https://rstudio-conf-2020.github.io/dl-keras-tf/notebooks/learning-curve-diagnostics.nb.html
+
+\newpage
+
+# Appendix
+## R Environment {#apdx1}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+sessionInfo()
+```
+## Grid Search Values for XGBoost Optimization {#apdx2}
+```{r echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, results="hide"}
+# --------------------------------------------------------------------------------
+# Tune Grid for XGBoost Optimization Step 1
+# --------------------------------------------------------------------------------
+tune_xgb1 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = c(3, 4, 5, 6),
+  eta = c(0.1, 0.2, 0.3),
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = 1,
+  subsample = 1)
+
+# --------------------------------------------------------------------------------
+#Tune Grid for XGBoost Optimization Step 2
+# --------------------------------------------------------------------------------
+tune_xgb2 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = c(train_xgb1$bestTune$max_depth - 2,
+                train_xgb1$bestTune$max_depth - 1, 
+                train_xgb1$bestTune$max_depth),
+  eta = train_xgb1$bestTune$eta,
+  gamma = 0,
+  colsample_bytree = 0.8,
+  min_child_weight = c(1, 2, 3, 4, 5),
+  subsample = 1)
+
+# --------------------------------------------------------------------------------
+# Tune Grid for XGBoost Optimization Step 3
+# --------------------------------------------------------------------------------
+tune_xgb3 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = train_xgb1$bestTune$eta,
+  gamma = 0,
+  colsample_bytree = c(0.4, 0.6, 0.8, 1.0),
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = c(0.5, 0.75, 1.0))
+
+# --------------------------------------------------------------------------------
+# Tune Grid for XGBoost Optimization Step 4
+# --------------------------------------------------------------------------------
+tune_xgb4 <- expand.grid(
+  nrounds = seq(from = 250, to = 1000, by = 50),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = train_xgb1$bestTune$eta,
+  gamma = c(0, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0),
+  colsample_bytree = train_xgb3$bestTune$colsample_bytree,
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = train_xgb3$bestTune$subsample)
+
+# --------------------------------------------------------------------------------
+# Tune Grid for XGBoost Optimization Step 5
+# --------------------------------------------------------------------------------
+tune_xgb5 <- expand.grid(
+  nrounds = seq(from = 1000, to = 20000, by = 200),
+  max_depth = train_xgb2$bestTune$max_depth,
+  eta = c(0.01, 0.015, 0.025, 0.05, 0.1),
+  gamma = train_xgb4$bestTune$gamma,
+  colsample_bytree = train_xgb3$bestTune$colsample_bytree,
+  min_child_weight = train_xgb2$bestTune$min_child_weight,
+  subsample = train_xgb3$bestTune$subsample)
+
+# --------------------------------------------------------------------------------
+# Final Tune Grid Value for Optimized XGBoost
+# (Note: this will be directly used in accompanying R file of this report)
+# --------------------------------------------------------------------------------
+tune_xgbfinal <- expand.grid(
+  nrounds = 20000,
+  max_depth = 6,
+  eta = 0.025,
+  gamma = 0.75,
+  colsample_bytree = 0.8,
+  min_child_weight = 5,
+  subsample = 0.75)
+```
